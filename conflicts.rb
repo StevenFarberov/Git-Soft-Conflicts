@@ -1,9 +1,11 @@
 $VERBOSE = nil
 require 'json'
 require 'date'
+require 'stringio'
 
 CMD_LINE_ARGS = Hash[ ARGV.join(' ').scan(/--?([^=\s]+)(?:=(\S+))?/) ]
 DEFAULT_RECENCY = 2 # Days
+DEFAULT_PROJECT = 'ui/orion'
 
 def get_changed_files(change_json)
   current_ps_data = change_json['currentPatchSet']
@@ -25,8 +27,11 @@ change_details = StringIO.new(change_details_with_stats).lines.first
 current_change_json = JSON.parse(change_details)
 current_changed_files = get_changed_files(current_change_json)
 
-open_changes = StringIO.new `ssh -p 29418 gerrit.rfiserve.net gerrit query --format=JSON --files --current-patch-set status:open project:ui/orion`
+project = CMD_LINE_ARGS['project'] || DEFAULT_PROJECT
 
+open_changes = StringIO.new `ssh -p 29418 gerrit.rfiserve.net gerrit query --format=JSON --files --current-patch-set status:open project:#{project}`
+
+conflicts = false
 open_changes.each_line do |change_details|
   change_json = JSON.parse(change_details)
 
@@ -44,6 +49,7 @@ open_changes.each_line do |change_details|
   common_changed_files = current_changed_files & get_changed_files(change_json)
 
   if common_changed_files.length > 0
+    conflicts = true
     cmt_msg = change_json['commitMessage'].split("\n").first
 
     puts "You and #{owner_full_name} are both modifying the files: #{common_changed_files.join(', ')}"
@@ -53,3 +59,4 @@ open_changes.each_line do |change_details|
   end
 end
 
+puts "There are no unmerged commits that also modify your changed files." unless conflicts
