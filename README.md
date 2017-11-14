@@ -8,6 +8,9 @@ Run from your git repo:
 ```
 $ ruby ~/gitConflicts/conflicts.rb
 ```
+Output:
 
+```
 You and Steven Farberov are both modifying the files: src/features/campaign-manage/components/ManageBladeTabs/SomeFile.js
 See Steven Farberov's commit "This is a commit msg" at https://gerrit.rfiserve.net/1234
+```
