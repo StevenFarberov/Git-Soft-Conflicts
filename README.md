@@ -17,6 +17,7 @@ See Steven Farberov's commit "This is a commit msg" at https://gerrit.rfiserve.n
 ```
 
 default project = ui/orion
+
 default recency (last modified time for the change) = 2 (days)
 
 Example with command-line args:
