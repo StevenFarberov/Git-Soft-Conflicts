@@ -18,38 +18,56 @@ def get_changed_files(change_json)
   end
 end
 
-current_change_id = `git log -1 | grep Change-Id | sed -n -e 's/^.*Change-Id: //p'`
-change_details_with_stats = `ssh -p 29418 gerrit.rfiserve.net gerrit query --format=JSON --files --current-patch-set change:#{current_change_id}`
+def handle_no_change_id
+  merge_message = `git log -1 | head -6 | tail -1 | grep "^    Merge"`
 
-change_details = StringIO.new(change_details_with_stats).lines.first
-current_change_json = JSON.parse(change_details)
-current_changed_files = get_changed_files(current_change_json)
-
-open_changes = StringIO.new `ssh -p 29418 gerrit.rfiserve.net gerrit query --format=JSON --files --current-patch-set status:open project:ui/orion`
-
-open_changes.each_line do |change_details|
-  change_json = JSON.parse(change_details)
-
-  next if change_json['type'] == 'stats'
-
-  owner_full_name = change_json['owner']['name']
-  next if current_change_json['owner']['name'] == owner_full_name
-
-  is_recent = DateTime.strptime(change_json['lastUpdated'].to_s,'%s') >
-      DateTime.now - (CMD_LINE_ARGS['recency'] || DEFAULT_RECENCY).to_i
-
-  # the changes are returned sorted DESC by lastUpdated so it's safe to early-return here
-  break unless is_recent
-
-  common_changed_files = current_changed_files & get_changed_files(change_json)
-
-  if common_changed_files.length > 0
-    cmt_msg = change_json['commitMessage'].split("\n").first
-
-    puts "You and #{owner_full_name} are both modifying the files: #{common_changed_files.join(', ')}"
-    #puts "See #{owner_full_name.split(' ').first}'s commit \"#{cmt_msg}\" with change-id = #{change_json['id']}"
-    puts "See #{owner_full_name.split(' ').first}'s commit \"#{cmt_msg}\" at #{change_json['url']}"
-    puts
+  if merge_message.empty?
+    puts "Current commit does not have a Change-Id. Please add one first."
+  else
+    puts "Current commit is a merge commit, and cannot be checked for conflicts."
   end
 end
 
+def get_conflicts(current_change_id)
+  change_details_with_stats = `ssh -p 29418 gerrit.rfiserve.net gerrit query --format=JSON --files --current-patch-set change:#{current_change_id}`
+
+  change_details = StringIO.new(change_details_with_stats).lines.first
+  current_change_json = JSON.parse(change_details)
+  current_changed_files = get_changed_files(current_change_json)
+
+  open_changes = StringIO.new `ssh -p 29418 gerrit.rfiserve.net gerrit query --format=JSON --files --current-patch-set status:open project:ui/orion`
+
+  open_changes.each_line do |change_details|
+    change_json = JSON.parse(change_details)
+
+    next if change_json['type'] == 'stats'
+
+    owner_full_name = change_json['owner']['name']
+    next if current_change_json['owner']['name'] == owner_full_name
+
+    is_recent = DateTime.strptime(change_json['lastUpdated'].to_s,'%s') >
+        DateTime.now - (CMD_LINE_ARGS['recency'] || DEFAULT_RECENCY).to_i
+
+    # the changes are returned sorted DESC by lastUpdated so it's safe to early-return here
+    break unless is_recent
+
+    common_changed_files = current_changed_files & get_changed_files(change_json)
+
+    if common_changed_files.length > 0
+      cmt_msg = change_json['commitMessage'].split("\n").first
+
+      puts "You and #{owner_full_name} are both modifying the files: #{common_changed_files.join(', ')}"
+      #puts "See #{owner_full_name.split(' ').first}'s commit \"#{cmt_msg}\" with change-id = #{change_json['id']}"
+      puts "See #{owner_full_name.split(' ').first}'s commit \"#{cmt_msg}\" at #{change_json['url']}"
+      puts
+    end
+  end
+end
+
+def main
+  current_change_id = `git log -1 | grep Change-Id | sed -n -e 's/^.*Change-Id: //p'`
+
+  current_change_id.empty? ? handle_no_change_id : get_conflicts(current_change_id)
+end
+
+main
